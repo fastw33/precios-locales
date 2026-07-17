@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import os
+from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
+
+
+class Settings:
+    app_name: str = os.getenv("APP_NAME", "Precios Locales OCR API")
+    app_env: str = os.getenv("APP_ENV", "development")
+    app_debug: bool = os.getenv("APP_DEBUG", "false").lower() == "true"
+
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        "mysql+pymysql://usuario:password@localhost:3306/precios_locales?charset=utf8mb4",
+    )
+
+    upload_dir: Path = Path(os.getenv("UPLOAD_DIR", "uploads"))
+    public_upload_base_url: str = os.getenv("PUBLIC_UPLOAD_BASE_URL", "").rstrip("/")
+    image_webp_quality: int = int(os.getenv("IMAGE_WEBP_QUALITY", "85"))
+    max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "10"))
+
+    @property
+    def upload_root(self) -> Path:
+        path = self.upload_dir
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return self.max_upload_mb * 1024 * 1024
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
