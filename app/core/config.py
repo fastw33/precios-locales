@@ -25,6 +25,8 @@ class Settings:
     public_upload_base_url: str = os.getenv("PUBLIC_UPLOAD_BASE_URL", "").rstrip("/")
     image_webp_quality: int = int(os.getenv("IMAGE_WEBP_QUALITY", "85"))
     max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "10"))
+    jwt_secret: str = os.getenv("JWT_SECRET", "")
+    internal_service_key: str = os.getenv("INTERNAL_SERVICE_KEY", "")
 
     @property
     def upload_root(self) -> Path:
@@ -41,4 +43,3 @@ class Settings:
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

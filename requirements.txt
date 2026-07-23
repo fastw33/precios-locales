@@ -4,6 +4,7 @@ python-multipart==0.0.20
 SQLAlchemy==2.0.41
 PyMySQL==1.1.1
 python-dotenv==1.1.1
+PyJWT==2.10.1
 pytesseract==0.3.13
 opencv-python-headless==4.13.0.92
 Pillow==12.1.1

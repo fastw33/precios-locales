@@ -3,10 +3,11 @@ from __future__ import annotations
 from calendar import monthrange
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_personal_access
 from app.core.database import get_db
 from app.models import Material, PriceHistory
 
@@ -15,7 +16,12 @@ router = APIRouter(prefix="/prices", tags=["prices"])
 
 
 @router.get("/latest")
-def latest_prices(id_personal: int, db: Session = Depends(get_db)) -> list[dict]:
+def latest_prices(
+    id_personal: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    require_personal_access(id_personal, request)
     latest_subquery = (
         db.query(
             PriceHistory.material_id.label("material_id"),
@@ -57,8 +63,10 @@ def material_history(
     material_id: int,
     desde: date,
     hasta: date,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
+    require_personal_access(id_personal, request)
     _validate_range(desde, hasta)
     material = db.query(Material).filter_by(id=material_id, id_personal=id_personal).one_or_none()
     if not material:
@@ -86,11 +94,13 @@ def material_history(
 @router.get("/compare-materials")
 def compare_materials(
     id_personal: int,
+    request: Request,
     material_ids: str = Query(..., description="IDs separados por coma, ejemplo: 1,2,3"),
     desde: date = Query(...),
     hasta: date = Query(...),
     db: Session = Depends(get_db),
 ) -> dict:
+    require_personal_access(id_personal, request)
     _validate_range(desde, hasta)
     ids = _parse_ids(material_ids)
     rows = (
@@ -118,11 +128,13 @@ def compare_materials(
 @router.get("/compare-periods")
 def compare_periods(
     id_personal: int,
+    request: Request,
     material_id: int,
     period_type: str = Query(..., pattern="^(year|month|day)$"),
     periods: str = Query(..., description="Periodos separados por coma. year: 2025,2026. month: 2026-06,2026-07. day: 2026-07-01,2026-07-17"),
     db: Session = Depends(get_db),
 ) -> dict:
+    require_personal_access(id_personal, request)
     material = db.query(Material).filter_by(id=material_id, id_personal=id_personal).one_or_none()
     if not material:
         raise HTTPException(status_code=404, detail="Material no encontrado.")

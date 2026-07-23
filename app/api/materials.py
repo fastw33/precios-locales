@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_personal_access
 from app.core.database import get_db
 from app.models import Material
 
@@ -11,7 +12,13 @@ router = APIRouter(prefix="/materials", tags=["materials"])
 
 
 @router.get("")
-def list_materials(id_personal: int, active: bool = True, db: Session = Depends(get_db)) -> list[dict]:
+def list_materials(
+    id_personal: int,
+    request: Request,
+    active: bool = True,
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    require_personal_access(id_personal, request)
     rows = (
         db.query(Material)
         .filter(Material.id_personal == id_personal, Material.active == active)
@@ -28,4 +35,3 @@ def list_materials(id_personal: int, active: bool = True, db: Session = Depends(
         }
         for row in rows
     ]
-

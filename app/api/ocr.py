@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
+from app.core.auth import require_personal_access
 from app.core.config import PROJECT_ROOT, get_settings
 from app.core.database import get_db
 from app.models import OcrDocument, OcrDocumentRow, OcrReviewEvent, PriceHistory
@@ -23,10 +24,12 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 
 @router.post("/process", response_model=DocumentProcessResponse)
 async def process_ocr(
+    request: Request,
     id_personal: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> DocumentProcessResponse:
+    require_personal_access(id_personal, request)
     settings = get_settings()
     data = await file.read()
     try:
@@ -92,7 +95,12 @@ async def process_ocr(
 
 
 @router.get("/documents")
-def list_ocr_documents(id_personal: int, db: Session = Depends(get_db)) -> list[dict]:
+def list_ocr_documents(
+    id_personal: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    require_personal_access(id_personal, request)
     documents = (
         db.query(OcrDocument)
         .filter(OcrDocument.id_personal == id_personal)
@@ -124,12 +132,14 @@ def list_ocr_documents(id_personal: int, db: Session = Depends(get_db)) -> list[
 @router.get("/{document_id}/image")
 def download_ocr_image(
     document_id: int,
+    request: Request,
     download: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     document = db.query(OcrDocument).filter_by(id=document_id).one_or_none()
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    require_personal_access(document.id_personal, request)
 
     image_path = (PROJECT_ROOT / document.compressed_image_path).resolve()
     upload_root = get_settings().upload_root.resolve()
@@ -146,10 +156,15 @@ def download_ocr_image(
 
 
 @router.delete("/{document_id}")
-def delete_ocr_document(document_id: int, db: Session = Depends(get_db)) -> dict:
+def delete_ocr_document(
+    document_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
     document = db.query(OcrDocument).filter_by(id=document_id).one_or_none()
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    require_personal_access(document.id_personal, request)
 
     if document.status == "processed":
         raise HTTPException(
@@ -183,10 +198,15 @@ def delete_ocr_document(document_id: int, db: Session = Depends(get_db)) -> dict
 
 
 @router.get("/{document_id}")
-def get_ocr_document(document_id: int, db: Session = Depends(get_db)) -> dict:
+def get_ocr_document(
+    document_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
     document = db.query(OcrDocument).filter_by(id=document_id).one_or_none()
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    require_personal_access(document.id_personal, request)
     return {
         "id": document.id,
         "id_personal": document.id_personal,
@@ -224,8 +244,14 @@ def get_ocr_document(document_id: int, db: Session = Depends(get_db)) -> dict:
 def review_ocr_document(
     document_id: int,
     payload: ReviewDocumentIn,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
+    document = db.query(OcrDocument).filter_by(id=document_id).one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    require_personal_access(document.id_personal, request)
+
     try:
         document = review_document(db, document_id, payload)
         db.commit()
