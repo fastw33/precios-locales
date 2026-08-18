@@ -56,7 +56,11 @@ def validate_material_and_price(
         return _review(material_raw, material_normalized, "no_match", None, "low_material_confidence", "Confianza baja en el material.")
 
     price_conf = row.get("price_confidence")
-    if price_conf is not None and Decimal(str(price_conf)) < settings.min_price_confidence:
+    if (
+        price_conf is not None
+        and Decimal(str(price_conf)) < settings.min_price_confidence
+        and not row.get("price_autocorrected")
+    ):
         return _review(material_raw, material_normalized, "no_match", None, "low_price_confidence", "Confianza baja en el precio.")
 
     if price_value is None:
@@ -160,4 +164,3 @@ def _review_with_material(
     notes: str,
 ) -> RowValidation:
     return RowValidation(material_raw, material_normalized, material_id, None, match_type, match_score, True, reason, "pending_review", notes)
-
