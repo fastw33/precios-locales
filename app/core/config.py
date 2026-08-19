@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
@@ -32,10 +33,11 @@ class Settings:
     cors_allow_credentials: bool = _bool_env("CORS_ALLOW_CREDENTIALS")
     auth_public_paths: list[str] = _csv_env("AUTH_PUBLIC_PATHS") or ["/health", "/health/db"]
 
-    database_url: str = os.getenv(
-        "DATABASE_URL",
-        "mysql+pymysql://usuario:password@localhost:3306/precios_locales?charset=utf8mb4",
-    )
+    db_host: str = os.getenv("DB_HOST", "localhost")
+    db_port: int = int(os.getenv("DB_PORT", "3306"))
+    db_user: str = os.getenv("DB_USER", "root")
+    db_password: str = os.getenv("DB_PASSWORD", "")
+    db_name: str = os.getenv("DB_NAME", "precios_locales")
 
     upload_dir: Path = Path(os.getenv("UPLOAD_DIR", "uploads"))
     public_upload_base_url: str = os.getenv("PUBLIC_UPLOAD_BASE_URL", "").rstrip("/")
@@ -43,6 +45,12 @@ class Settings:
     max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "10"))
     jwt_secret: str = os.getenv("JWT_SECRET", "")
     internal_service_key: str = os.getenv("INTERNAL_SERVICE_KEY", "")
+
+    @property
+    def database_url(self) -> str:
+        user = quote_plus(self.db_user)
+        password = quote_plus(self.db_password)
+        return f"mysql+pymysql://{user}:{password}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
 
     @property
     def upload_root(self) -> Path:
