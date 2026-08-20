@@ -8,7 +8,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models import Material, MaterialAlias, PriceHistory, ValidationSettings
-from app.services.text_normalizer import normalize_for_exact_match, normalize_symbols_and_spaces
+from app.services.text_normalizer import canonicalize_ocr_material, normalize_for_exact_match, normalize_symbols_and_spaces
 
 
 @dataclass
@@ -43,7 +43,7 @@ def validate_material_and_price(
     row: dict,
     settings: ValidationSettings,
 ) -> RowValidation:
-    material_raw = row.get("material") or row.get("material_raw") or ""
+    material_raw = canonicalize_ocr_material(row.get("material") or row.get("material_raw") or "")
     material_normalized = normalize_for_exact_match(material_raw)
     symbol_key = normalize_symbols_and_spaces(material_raw)
     price_value = row.get("price_value")

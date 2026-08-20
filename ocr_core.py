@@ -390,9 +390,12 @@ def _trim_trailing_empty_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
 def _is_section_header_material(value: str) -> bool:
     normalized = _clean_ocr_text(value).upper()
     normalized = normalized.translate(str.maketrans("ÁÉÍÓÚ", "AEIOU"))
-    normalized = re.sub(r"[^A-Z ]", "", normalized)
+    normalized = re.sub(r"[^A-Z0-9 ]", " ", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
-    return normalized in {"EXPORTACION", "IMPORTACION", "NACIONAL"}
+    tokens = normalized.split()
+    if not tokens or tokens[0] not in {"EXPORTACION", "IMPORTACION", "NACIONAL"}:
+        return False
+    return len(tokens) == 1 or all(token.isdigit() for token in tokens[1:])
 
 
 def _drop_section_header_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

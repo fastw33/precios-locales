@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models import OcrDocument, OcrDocumentRow, PriceHistory
 from app.services.date_parser import extract_detected_date
+from app.services.text_normalizer import canonicalize_ocr_material, is_section_header_material
 from app.services.validation_service import get_or_create_validation_settings, validate_material_and_price
 
 
@@ -83,11 +84,14 @@ def persist_ocr_result(
     rows_requiring_review = 0
     for raw_row in all_ocr_rows:
         section = _normalize_section(raw_row.get("section"))
+        material_raw = raw_row.get("material_raw") or raw_row.get("material")
+        material_ocr = canonicalize_ocr_material(raw_row.get("material") or material_raw)
+        row_for_validation = {**raw_row, "material": material_ocr, "material_raw": material_raw}
         validation = validate_material_and_price(
             db,
             id_personal=id_personal,
             section=section,
-            row=raw_row,
+            row=row_for_validation,
             settings=settings,
         )
         if validation.requires_review:
@@ -98,8 +102,8 @@ def persist_ocr_result(
             id_personal=id_personal,
             section=section,
             row_number=int(raw_row.get("row") or 0),
-            material_raw=raw_row.get("material_raw") or raw_row.get("material"),
-            material_ocr=raw_row.get("material"),
+            material_raw=material_raw,
+            material_ocr=material_ocr,
             material_normalized=validation.material_normalized,
             suggested_material_id=validation.suggested_material_id,
             approved_material_id=validation.approved_material_id,
@@ -150,7 +154,4 @@ def _normalize_section(value: str | None) -> str:
 
 
 def _is_section_header_row(row: dict) -> bool:
-    material = (row.get("material") or row.get("material_raw") or "").strip().upper()
-    material = material.translate(str.maketrans("ÁÉÍÓÚ", "AEIOU"))
-    material = " ".join(material.split())
-    return material in {"EXPORTACION", "IMPORTACION", "NACIONAL"}
+    return is_section_header_material(row.get("material") or row.get("material_raw"))
