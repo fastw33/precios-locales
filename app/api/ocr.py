@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 async def process_ocr(
     request: Request,
     id_personal: int = Form(...),
+    observed_date: date | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> DocumentProcessResponse:
@@ -44,6 +46,7 @@ async def process_ocr(
             original_image_size=len(data),
             compressed_image=compressed,
             image_sha256=sha256_bytes(data),
+            observed_date=observed_date,
         )
         db.commit()
     except ValueError as exc:

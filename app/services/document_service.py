@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -19,10 +19,23 @@ def persist_ocr_result(
     original_image_size: int,
     compressed_image: dict,
     image_sha256: str,
+    observed_date: date | None = None,
 ) -> tuple[OcrDocument, list[OcrDocumentRow]]:
     settings = get_or_create_validation_settings(db, id_personal)
-    detected_date = extract_detected_date(ocr_result) or datetime.utcnow().date()
-    all_ocr_rows = list(ocr_result.get("exportacion") or []) + list(ocr_result.get("nacional") or [])
+    detected_date = observed_date or extract_detected_date(ocr_result)
+    if detected_date is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "observed_date_required",
+                "message": "No fue posible detectar la fecha de la lista. Ingresa la fecha visible en la imagen.",
+            },
+        )
+    all_ocr_rows = [
+        row
+        for row in list(ocr_result.get("exportacion") or []) + list(ocr_result.get("nacional") or [])
+        if not _is_section_header_row(row)
+    ]
 
     existing_same_date = (
         db.query(OcrDocument)
@@ -134,3 +147,10 @@ def _normalize_section(value: str | None) -> str:
     if value in {"EXPORTACION", "NACIONAL"}:
         return value
     return "OTRO"
+
+
+def _is_section_header_row(row: dict) -> bool:
+    material = (row.get("material") or row.get("material_raw") or "").strip().upper()
+    material = material.translate(str.maketrans("ÁÉÍÓÚ", "AEIOU"))
+    material = " ".join(material.split())
+    return material in {"EXPORTACION", "IMPORTACION", "NACIONAL"}

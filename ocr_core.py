@@ -387,6 +387,22 @@ def _trim_trailing_empty_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     return trimmed
 
 
+def _is_section_header_material(value: str) -> bool:
+    normalized = _clean_ocr_text(value).upper()
+    normalized = normalized.translate(str.maketrans("ÁÉÍÓÚ", "AEIOU"))
+    normalized = re.sub(r"[^A-Z ]", "", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized in {"EXPORTACION", "IMPORTACION", "NACIONAL"}
+
+
+def _drop_section_header_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if not _is_section_header_material(row.get("material") or row.get("material_raw") or "")
+    ]
+
+
 def extract_template(image: np.ndarray) -> dict[str, Any]:
     normalized, image_info = normalize_to_template(image)
 
@@ -489,8 +505,8 @@ def extract_template(image: np.ndarray) -> dict[str, Any]:
             }
         )
 
-    export_rows = _trim_trailing_empty_rows(export_rows)
-    national_rows = _trim_trailing_empty_rows(national_rows)
+    export_rows = _drop_section_header_rows(_trim_trailing_empty_rows(export_rows))
+    national_rows = _drop_section_header_rows(_trim_trailing_empty_rows(national_rows))
 
     notes_y1 = row_start + 5 * row_height
     notes = ocr_block(_cell(normalized, 428, notes_y1, 849, 1194), psm=6, scale=3)
