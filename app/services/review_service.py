@@ -127,7 +127,7 @@ def _resolve_or_create_material(
     material_canonical: str | None,
 ) -> Material:
     if material_id:
-        material = db.query(Material).filter_by(id=material_id, id_personal=document.id_personal).one_or_none()
+        material = db.query(Material).filter_by(id=material_id).one_or_none()
         if not material:
             raise HTTPException(status_code=400, detail=f"Material no encontrado: {material_id}")
         return material
@@ -137,7 +137,12 @@ def _resolve_or_create_material(
         raise HTTPException(status_code=400, detail=f"Fila {row.id} no tiene nombre de material.")
     normalized = normalize_for_exact_match(canonical)
 
-    material = db.query(Material).filter_by(id_personal=document.id_personal, section=row.section, normalized_name=normalized).one_or_none()
+    material = (
+        db.query(Material)
+        .filter_by(section=row.section, normalized_name=normalized, active=True)
+        .order_by(Material.id)
+        .first()
+    )
     if material:
         return material
 
@@ -177,7 +182,12 @@ def _ensure_alias(db: Session, id_personal: int, material: Material, alias_text:
     if pending_duplicate:
         return
 
-    exists = db.query(MaterialAlias).filter_by(id_personal=id_personal, section=section, normalized_alias=normalized).one_or_none()
+    exists = (
+        db.query(MaterialAlias)
+        .filter_by(section=section, normalized_alias=normalized)
+        .order_by(MaterialAlias.id)
+        .first()
+    )
     if exists:
         return
     db.add(

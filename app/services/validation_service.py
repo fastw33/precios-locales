@@ -66,23 +66,33 @@ def validate_material_and_price(
     if price_value is None:
         return _review(material_raw, material_normalized, "no_match", None, "invalid_price", "Precio inválido o no detectado.")
 
-    alias = db.query(MaterialAlias).filter_by(id_personal=id_personal, section=section, normalized_alias=material_normalized).one_or_none()
+    alias = (
+        db.query(MaterialAlias)
+        .filter_by(section=section, normalized_alias=material_normalized)
+        .order_by(MaterialAlias.id)
+        .first()
+    )
     if alias:
-        price_review = _validate_price_range(db, id_personal, alias.material_id, int(price_value), settings)
+        price_review = _validate_price_range(db, alias.material_id, int(price_value), settings)
         if price_review:
             return _review_with_material(material_raw, material_normalized, alias.material_id, "exact_alias", 100, "price_out_of_range", price_review)
         return RowValidation(material_raw, material_normalized, alias.material_id, alias.material_id, "exact_alias", 100, False, "none", "valid", None)
 
-    material = db.query(Material).filter_by(id_personal=id_personal, section=section, normalized_name=material_normalized, active=True).one_or_none()
+    material = (
+        db.query(Material)
+        .filter_by(section=section, normalized_name=material_normalized, active=True)
+        .order_by(Material.id)
+        .first()
+    )
     if material:
-        price_review = _validate_price_range(db, id_personal, material.id, int(price_value), settings)
+        price_review = _validate_price_range(db, material.id, int(price_value), settings)
         if price_review:
             return _review_with_material(material_raw, material_normalized, material.id, "exact_material", 100, "price_out_of_range", price_review)
         return RowValidation(material_raw, material_normalized, material.id, material.id, "exact_material", 100, False, "none", "valid", None)
 
     symbol_match = _find_symbol_space_match(db, id_personal, section, symbol_key)
     if symbol_match and settings.allow_symbol_space_autocorrect:
-        price_review = _validate_price_range(db, id_personal, symbol_match.id, int(price_value), settings)
+        price_review = _validate_price_range(db, symbol_match.id, int(price_value), settings)
         if price_review:
             return _review_with_material(material_raw, material_normalized, symbol_match.id, "symbol_space_variant", 100, "price_out_of_range", price_review)
         return RowValidation(
@@ -115,11 +125,11 @@ def validate_material_and_price(
 
 
 def _find_symbol_space_match(db: Session, id_personal: int, section: str, symbol_key: str) -> Material | None:
-    materials = db.query(Material).filter_by(id_personal=id_personal, section=section, active=True).all()
+    materials = db.query(Material).filter_by(section=section, active=True).order_by(Material.id).all()
     for material in materials:
         if normalize_symbols_and_spaces(material.canonical_name) == symbol_key:
             return material
-    aliases = db.query(MaterialAlias).filter_by(id_personal=id_personal, section=section).all()
+    aliases = db.query(MaterialAlias).filter_by(section=section).order_by(MaterialAlias.id).all()
     for alias in aliases:
         if normalize_symbols_and_spaces(alias.alias_text) == symbol_key:
             return alias.material
@@ -128,17 +138,17 @@ def _find_symbol_space_match(db: Session, id_personal: int, section: str, symbol
 
 def _find_possible_text_change(db: Session, id_personal: int, section: str, normalized: str) -> tuple[Material, float] | None:
     best: tuple[Material, float] | None = None
-    for material in db.query(Material).filter_by(id_personal=id_personal, section=section, active=True).all():
+    for material in db.query(Material).filter_by(section=section, active=True).order_by(Material.id).all():
         score = SequenceMatcher(None, normalized, material.normalized_name).ratio()
         if score >= 0.86 and (best is None or score > best[1]):
             best = (material, score)
     return best
 
 
-def _validate_price_range(db: Session, id_personal: int, material_id: int, new_price: int, settings: ValidationSettings) -> str | None:
+def _validate_price_range(db: Session, material_id: int, new_price: int, settings: ValidationSettings) -> str | None:
     latest = (
         db.query(PriceHistory)
-        .filter_by(id_personal=id_personal, material_id=material_id)
+        .filter_by(material_id=material_id)
         .order_by(desc(PriceHistory.observed_date), desc(PriceHistory.id))
         .first()
     )

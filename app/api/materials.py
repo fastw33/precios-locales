@@ -21,7 +21,7 @@ def list_materials(
     require_personal_access(id_personal, request)
     rows = (
         db.query(Material)
-        .filter(Material.id_personal == id_personal, Material.active == active)
+        .filter(Material.active == active)
         .order_by(Material.section, Material.canonical_name)
         .all()
     )
@@ -32,6 +32,8 @@ def list_materials(
             "normalized_name": row.normalized_name,
             "section": row.section,
             "active": row.active,
+            "id_personal": row.id_personal,
+            "uploaded_by_id_personal": row.id_personal,
         }
         for row in rows
     ]

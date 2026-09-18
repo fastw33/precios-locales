@@ -22,12 +22,24 @@ def latest_prices(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     require_personal_access(id_personal, request)
-    latest_subquery = (
+    latest_date_subquery = (
         db.query(
             PriceHistory.material_id.label("material_id"),
             func.max(PriceHistory.observed_date).label("last_date"),
         )
-        .filter(PriceHistory.id_personal == id_personal)
+        .group_by(PriceHistory.material_id)
+        .subquery()
+    )
+    latest_id_subquery = (
+        db.query(
+            PriceHistory.material_id.label("material_id"),
+            func.max(PriceHistory.id).label("latest_id"),
+        )
+        .join(
+            latest_date_subquery,
+            (latest_date_subquery.c.material_id == PriceHistory.material_id)
+            & (latest_date_subquery.c.last_date == PriceHistory.observed_date),
+        )
         .group_by(PriceHistory.material_id)
         .subquery()
     )
@@ -36,11 +48,9 @@ def latest_prices(
         db.query(PriceHistory, Material)
         .join(Material, Material.id == PriceHistory.material_id)
         .join(
-            latest_subquery,
-            (latest_subquery.c.material_id == PriceHistory.material_id)
-            & (latest_subquery.c.last_date == PriceHistory.observed_date),
+            latest_id_subquery,
+            latest_id_subquery.c.latest_id == PriceHistory.id,
         )
-        .filter(PriceHistory.id_personal == id_personal)
         .order_by(Material.canonical_name)
         .all()
     )
@@ -48,10 +58,13 @@ def latest_prices(
     return [
         {
             "material_id": material.id,
+            "price_history_id": price.id,
             "material": material.canonical_name,
             "section": material.section,
             "price_value": price.price_value,
             "observed_date": price.observed_date,
+            "id_personal": price.id_personal,
+            "uploaded_by_id_personal": price.id_personal,
         }
         for price, material in rows
     ]
@@ -68,18 +81,17 @@ def material_history(
 ) -> dict:
     require_personal_access(id_personal, request)
     _validate_range(desde, hasta)
-    material = db.query(Material).filter_by(id=material_id, id_personal=id_personal).one_or_none()
+    material = db.query(Material).filter_by(id=material_id).one_or_none()
     if not material:
         raise HTTPException(status_code=404, detail="Material no encontrado.")
 
     rows = (
         db.query(PriceHistory)
         .filter(
-            PriceHistory.id_personal == id_personal,
             PriceHistory.material_id == material_id,
             PriceHistory.observed_date.between(desde, hasta),
         )
-        .order_by(PriceHistory.observed_date)
+        .order_by(PriceHistory.observed_date, PriceHistory.id)
         .all()
     )
     return {
@@ -87,7 +99,16 @@ def material_history(
         "material": material.canonical_name,
         "desde": desde,
         "hasta": hasta,
-        "data": [{"date": row.observed_date, "price_value": row.price_value} for row in rows],
+        "data": [
+            {
+                "price_history_id": row.id,
+                "date": row.observed_date,
+                "price_value": row.price_value,
+                "id_personal": row.id_personal,
+                "uploaded_by_id_personal": row.id_personal,
+            }
+            for row in rows
+        ],
     }
 
 
@@ -107,11 +128,10 @@ def compare_materials(
         db.query(PriceHistory, Material)
         .join(Material, Material.id == PriceHistory.material_id)
         .filter(
-            PriceHistory.id_personal == id_personal,
             PriceHistory.material_id.in_(ids),
             PriceHistory.observed_date.between(desde, hasta),
         )
-        .order_by(PriceHistory.observed_date, Material.canonical_name)
+        .order_by(PriceHistory.observed_date, PriceHistory.id, Material.canonical_name)
         .all()
     )
 
@@ -120,7 +140,15 @@ def compare_materials(
         series.setdefault(
             material.id,
             {"material_id": material.id, "material": material.canonical_name, "section": material.section, "data": []},
-        )["data"].append({"date": price.observed_date, "price_value": price.price_value})
+        )["data"].append(
+            {
+                "price_history_id": price.id,
+                "date": price.observed_date,
+                "price_value": price.price_value,
+                "id_personal": price.id_personal,
+                "uploaded_by_id_personal": price.id_personal,
+            }
+        )
 
     return {"desde": desde, "hasta": hasta, "series": list(series.values())}
 
@@ -135,7 +163,7 @@ def compare_periods(
     db: Session = Depends(get_db),
 ) -> dict:
     require_personal_access(id_personal, request)
-    material = db.query(Material).filter_by(id=material_id, id_personal=id_personal).one_or_none()
+    material = db.query(Material).filter_by(id=material_id).one_or_none()
     if not material:
         raise HTTPException(status_code=404, detail="Material no encontrado.")
 
@@ -148,11 +176,10 @@ def compare_periods(
         rows = (
             db.query(PriceHistory)
             .filter(
-                PriceHistory.id_personal == id_personal,
                 PriceHistory.material_id == material_id,
                 PriceHistory.observed_date.between(desde, hasta),
             )
-            .order_by(PriceHistory.observed_date)
+            .order_by(PriceHistory.observed_date, PriceHistory.id)
             .all()
         )
         series.append(
@@ -160,7 +187,16 @@ def compare_periods(
                 "period": label,
                 "desde": desde,
                 "hasta": hasta,
-                "data": [{"date": row.observed_date, "price_value": row.price_value} for row in rows],
+                "data": [
+                    {
+                        "price_history_id": row.id,
+                        "date": row.observed_date,
+                        "price_value": row.price_value,
+                        "id_personal": row.id_personal,
+                        "uploaded_by_id_personal": row.id_personal,
+                    }
+                    for row in rows
+                ],
             }
         )
 
